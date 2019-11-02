@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">sound_player_app</string>
+    <string name="scan_start_dialog">Scanning ...</string>
+    <string name="scan_stop_dialog">Scan finished. Tap this text to rescan.</string>
 </resources>
