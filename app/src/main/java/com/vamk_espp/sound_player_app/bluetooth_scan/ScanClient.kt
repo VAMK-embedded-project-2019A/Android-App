@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 
-open class Client(private val context: Context) {
+open class ScanClient(val context: Context) {
     private val adapter = BluetoothAdapter.getDefaultAdapter()
     private val filter = IntentFilter()
 
@@ -17,6 +17,7 @@ open class Client(private val context: Context) {
 
     init {
         filter.addAction(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
     }
@@ -48,12 +49,17 @@ open class Client(private val context: Context) {
     open fun onScanStop() {
     }
 
+    open fun onError() {
+
+    }
+
     // call corresponding call back for each action
     private fun receiveIntent(intent: Intent) {
         when (intent.action) {
             BluetoothDevice.ACTION_FOUND -> receiveActionFound(intent)
             BluetoothAdapter.ACTION_DISCOVERY_STARTED -> onScanStart()
             BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> onScanStop()
+            BluetoothAdapter.ACTION_STATE_CHANGED -> receiveStateChange(intent)
         }
     }
 
@@ -63,5 +69,11 @@ open class Client(private val context: Context) {
         if (device != null) {
             onDiscover(device)
         }
+    }
+
+    private fun receiveStateChange(intent: Intent) {
+        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+        if (state != BluetoothAdapter.STATE_ON)
+            onError()
     }
 }

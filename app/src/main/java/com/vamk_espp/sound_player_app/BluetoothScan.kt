@@ -4,73 +4,31 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.ListView
 import android.bluetooth.BluetoothDevice
+import android.content.Intent
+import android.util.Log
 import android.view.View
 import android.widget.TextView
-import com.vamk_espp.sound_player_app.bluetooth_scan.Client
+import com.vamk_espp.sound_player_app.bluetooth_scan.ScanClient as Client
 import com.vamk_espp.sound_player_app.bluetooth_scan.ListAdapter
-import java.util.*
+import com.vamk_espp.sound_player_app.helpers.ActivityId
+import com.vamk_espp.sound_player_app.helpers.ExtraId
+import com.vamk_espp.sound_player_app.helpers.compareDevice
 import kotlin.collections.ArrayList
 
 class BluetoothScan : AppCompatActivity() {
     private val deviceList = object : ArrayList<BluetoothDevice>() {
-        // prioritize device display (from highest to lowest)
-        // - Device name ESPP Sound Player
-        // - Device with other name
-        // - Device without name
-        @Suppress("SpellCheckingInspection")
-        private fun prioritizeDevice(a: BluetoothDevice): Int {
-            val deviceName = "ESPP Sound Player"
-
-            when (a.name) {
-                null -> return 0
-                deviceName -> return 2
-            }
-            return 1
-        }
-
-        private fun compareDevice(a: BluetoothDevice, b: BluetoothDevice): Int {
-            val pA = prioritizeDevice(a)
-            val pB = prioritizeDevice(b)
-
-            // compare priority
-            if (pA > pB) return 1
-            if (pA < pB) return -1
-
-            // compare name (alphabetical)
-            if (a.name != null && b.name != null) {
-                // compare without case
-                val nameA = a.name.toLowerCase(Locale.getDefault())
-                val nameB = b.name.toLowerCase(Locale.getDefault())
-                if (nameA > nameB) return -1
-                if (nameA < nameB) return 1
-
-                // compare with case
-                if (a.name > b.name) return -1
-                if (a.name < b.name) return 1
-            }
-
-            // compare address (increasing)
-            if (a.address > b.address) return -1
-            if (a.address < b.address) return 1
-
-            return 0
-        }
-
         // add with priority and deduplicate
         override fun add(element: BluetoothDevice): Boolean {
+            // compare result
             var cmp = 1
-            var i = size // if the for loop is not break, add to the end of the array
 
-            // find the first item that is not lower than the element in priority
-            for (j in 0 until size) {
-                cmp = compareDevice(element, this[j])
-
-                // add to the position of the first element that has lower priority
-                if (cmp > -1) {
-                    i = j
-                    break
-                }
+            // get first device in the list that has lower priority than the added element
+            var i = indexOfFirst {
+                cmp = compareDevice(it, element)
+                cmp < 1
             }
+            // if none is found, add to the end of the list
+            i = if (i > -1) i else size
 
             // only add if item is not duplicate
             if (cmp != 0) {
@@ -102,6 +60,8 @@ class BluetoothScan : AppCompatActivity() {
             scanning = false
             dialogTextView.setText(R.string.scan_stop_dialog)
         }
+
+        override fun onError() = handleBtError()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,29 +75,71 @@ class BluetoothScan : AppCompatActivity() {
         // setup list view
         deviceListAdapter = ListAdapter(this, R.layout.bt_scan_item, deviceList)
         deviceListView.adapter = deviceListAdapter
+        deviceListView.setOnItemClickListener { _, _, position, _ ->
+            val device = deviceList[position]
+            startConnection(device)
+        }
 
-        // register client broadcast listener
-        client.register()
-
-        // start bluetooth scan
-        client.startScan()
+        Log.d("BtScan", "On create")
     }
 
     override fun onDestroy() {
         super.onDestroy()
 
+        Log.d("BtScan", "On destroy")
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        // register client broadcast listener
+        client.register()
+
+        // start bluetooth scan
+        startScan()
+
+        Log.d("BtScan", "On resume")
+    }
+
+    override fun onPause() {
+        super.onPause()
+
         // unregister client broadcast listener
         client.unregister()
+
+        Log.d("BtScan", "On pause")
     }
 
     fun dialogOnClick(@Suppress("UNUSED_PARAMETER") v: View) {
-        if (!scanning) {
-            // clear list and update view
-            deviceList.clear()
-            deviceListAdapter.notifyDataSetChanged()
+        if (!scanning)
+            startScan()
+    }
 
-            // start new scan
-            client.startScan()
+    private fun startScan() {
+        // clear list and update view
+        deviceList.clear()
+        deviceListAdapter.notifyDataSetChanged()
+
+        // start new scan
+        client.startScan()
+    }
+
+    private fun handleBtError() {
+        this.finish()
+
+        val intent = Intent(this, BluetoothStatus::class.java).apply {
+            putExtra(ExtraId.EXTRA_ACTIVITY_ID, ActivityId.BT_SCAN)
         }
+        startActivity(intent)
+    }
+
+    private fun startConnection(device: BluetoothDevice) {
+        this.finish()
+
+        val intent = Intent(this, BluetoothConnect::class.java).apply {
+            putExtra(ExtraId.EXTRA_DEVICE_NAME, device.name ?: "Anonymous device")
+            putExtra(ExtraId.EXTRA_DEVICE_MAC, device.address)
+        }
+        startActivity(intent)
     }
 }
